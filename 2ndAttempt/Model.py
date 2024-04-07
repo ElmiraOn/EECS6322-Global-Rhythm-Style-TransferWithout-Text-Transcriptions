@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from torch.nn.parameter import Parameter
+import math
 
 
 # Creating a convulutional model with same padding and stride o 1 and relu
@@ -90,22 +91,87 @@ class ResampleLayer(nn.Module):
         # Assuming x is a batch of frames
         resampled_x = [self.resample(frame) for frame in x]
         return resampled_x
+class PositionalEncoding(torch.nn.Module):
+    """ From the paper: Global Rhythm Style Transfer Without Text Transcriptions
 
+    Sinusoidal positional encoding for non-recurrent neural networks.
+
+    Implementation based on "Attention Is All You Need"
+    :cite:`DBLP:journals/corr/VaswaniSPUJGKP17`
+
+    Args:
+       dropout (float): dropout parameter
+       dim (int): embedding size
+    """
+
+    def __init__(self, dropout, dim, max_len=5000):
+        if dim % 2 != 0:
+            raise ValueError("Cannot use sin/cos positional encoding with "
+                             "odd dim (got dim={:f})".format(dim))
+        pe = torch.zeros(max_len, dim)
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp((torch.arange(0, dim, 2, dtype=torch.float) *
+                             -(math.log(10000.0) / dim)))
+        pe[:, 0::2] = torch.sin(position.float() * div_term)
+        pe[:, 1::2] = torch.cos(position.float() * div_term)
+        pe = pe.unsqueeze(1)
+        super(PositionalEncoding, self).__init__()
+        self.register_buffer('pe', pe)
+        self.dropout = torch.nn.Dropout(p=dropout)
+        self.dim = dim
+
+    def forward(self, emb, step=None):
+        """Embed inputs.
+
+        Args:
+            emb (FloatTensor): Sequence of word vectors
+                ``(seq_len, batch_size, self.dim)``
+            step (int or NoneType): If stepwise (``seq_len = 1``), use
+                the encoding for this position.
+        """
+
+        emb = emb * math.sqrt(self.dim)
+        if step is None:
+            emb = emb + self.pe[:emb.size(0)]
+        else:
+            emb = emb + self.pe[step]
+        emb = self.dropout(emb)
+        return emb
+
+class Decoder(torch.nn.Module):
+  def __init__(self, num_heads=8, num_layers=4, d_model=256, d_freq=80, dropout=0.1):
+    super(Decoder, self).__init__()
+
+    self.pos_encoder = PositionalEncoding(dropout, d_model)
+
+    encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads)
+    self.transformer_encoder = torch.nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+    decoder_layer = torch.nn.TransformerDecoderLayer(d_model=d_model, nhead=num_heads)
+    self.transformer_decoder = torch.nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+
+  def forward(self, src, tgt):
+    src_embed = self.pos_encoder(src)
+    tgt_embed = self.pos_encoder(tgt)
+
+    memory = self.transformer_encoder(src_embed)
+    output = self.transformer_decoder(tgt_embed, memory)
+    return output
 # Define the Transformer decoder model
-class Decoder(nn.Module):
-    def __init__(self, d_model=256, num_heads=8, num_encoder_layers = 4, num_decoder_layers = 4, dim_feedforward=2048, dropout=0.1):
-        super(Decoder, self).__init__()
-        self.encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads,
-                                                                        dim_feedforward=dim_feedforward,dropout=dropout), 
-                                            num_layers=num_encoder_layers)
-        self.decoder = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model=d_model, nhead=num_heads, 
-                                                                        dim_feedforward=dim_feedforward, dropout=dropout), 
-                                             num_layers=num_decoder_layers)
+# class Decoder(nn.Module):
+#     def __init__(self, d_model=256, num_heads=8, num_encoder_layers = 4, num_decoder_layers = 4, dim_feedforward=2048, dropout=0.1):
+#         super(Decoder, self).__init__()
+#         self.encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads,
+#                                                                         dim_feedforward=dim_feedforward,dropout=dropout), 
+#                                             num_layers=num_encoder_layers)
+#         self.decoder = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model=d_model, nhead=num_heads, 
+#                                                                         dim_feedforward=dim_feedforward, dropout=dropout), 
+#                                              num_layers=num_decoder_layers)
 
-    def forward(self, src, tgt, src_mask=None, tgt_mask=None, memory_mask=None, src_key_padding_mask=None, tgt_key_padding_mask=None, memory_key_padding_mask=None):
-        memory = self.encoder(src, mask=src_mask, src_key_padding_mask=src_key_padding_mask)
-        output = self.decoder(tgt, memory, tgt_mask=tgt_mask, memory_mask=memory_mask, tgt_key_padding_mask=tgt_key_padding_mask, memory_key_padding_mask=memory_key_padding_mask)
-        return output
+#     def forward(self, src, tgt, src_mask=None, tgt_mask=None, memory_mask=None, src_key_padding_mask=None, tgt_key_padding_mask=None, memory_key_padding_mask=None):
+#         memory = self.encoder(src, mask=src_mask, src_key_padding_mask=src_key_padding_mask)
+#         output = self.decoder(tgt, memory, tgt_mask=tgt_mask, memory_mask=memory_mask, tgt_key_padding_mask=tgt_key_padding_mask, memory_key_padding_mask=memory_key_padding_mask)
+#         return output
 
 
 class Model(nn.Module):
