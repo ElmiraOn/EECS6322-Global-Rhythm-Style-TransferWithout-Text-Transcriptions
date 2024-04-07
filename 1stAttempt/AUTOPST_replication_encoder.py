@@ -36,9 +36,9 @@ class Encoder():
           x = layer(x)
         return x
 
-input_shape = tf.random.normal((1, 13, 1)) # Assuming 1D input
+# input_shape = tf.random.normal((1, 13, 1)) # Assuming 1D input
 
-# Create the encoder model
-encoder_model = Encoder()
-output = encoder_model.forward(input_shape)
-print(output)
+# # Create the encoder model
+# encoder_model = Encoder()
+# output = encoder_model.forward(input_shape)
+# print(output)
