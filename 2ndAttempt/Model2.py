@@ -246,7 +246,16 @@ class training_1(nn.Module):
         fb = Filter_mean(reps, mask_codes, cd_long.size(1))
         tensor = torch.bmm(fb.detach(), cd_long)
         tensor_sync = self.pad_seq(tensor, reps, spec_len)
-
+        speech_embedd_1 = self.encoder2(speech_embedd)
+        # text to speech
+        _, memory_tx, _ = self.text_encoder(tensor_sync.transpose(1,0), spec_len, speech_embedd)
+        memory_tx_spk = torch.cat((speech_embedd_1.unsqueeze(0), memory_tx), dim=0)
+        self.speech_decoder.decoder.init_state(memory_tx_spk, None, None)
+        spect_out, gate_sp_out \
+        = self.speech_decoder(target_spec, spec_len, memory_tx_spk, spec_len+1)
+        
+        return spect_out, gate_sp_out
+    
     
 
     
