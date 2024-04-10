@@ -233,3 +233,17 @@ class training_2(nn.Module):
         self.speech_decoder = speech_decoder(hparams)   
         self.encoder2 = nn.Linear(hparams.dim_spk, hparams.enc_rnn_size, bias=True)
         self.fast_decoder_speech = Fast_decoder(hparams, 'Speech')
+        
+    def forward(self, cep, masks, mask_codes, reps, length,target_spec, spec_len, speech_embedd):
+        
+        cd = self.encoder(cep, masks)
+        fb = Filter_mean(reps, mask_codes, cd.size(1))
+        tensor = torch.bmm(fb.detach(), cd.detach())
+        speech_embedd_1 = self.encoder2(speech_embedd)
+        _, memory_text, _ = self.text_encoder(tensor.transpose(1,0), length, speech_embedd)
+        memory_text_sp = torch.cat((speech_embedd_1.unsqueeze(0), memory_text), dim=0)
+        self.speech_decoder.decoder.init_state(memory_text_sp, None, None)
+        out, gate_sp_out = self.speech_decoder(target_spec, spec_len, memory_tx_sp, length+1)
+        
+        return out, gate_sp_out
+    
