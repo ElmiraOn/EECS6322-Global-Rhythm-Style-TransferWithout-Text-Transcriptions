@@ -1,5 +1,5 @@
 from data_loader import get_loader
-from hparams_autopst import hparams, hparams_debug_string
+from hparams import hparams, hparams_debug_string
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -9,7 +9,6 @@ from utils import sequence_mask
 import warnings
 warnings.filterwarnings("ignore")
 
-# from Model2 import Generator_1 as Model2
 
 # Define your training loop
 def train_model(model, train_loader, criterion, optimizer, device, epochs):
