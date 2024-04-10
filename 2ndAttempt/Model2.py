@@ -232,3 +232,21 @@ class training_1(nn.Module):
         self.encoder2 = nn.Linear(hparams.dim_spk, hparams.enc_rnn_size, bias=True)
         self.fast_decoder_speech = Fast_decoder(hparams, 'Speech')
         
+    def pad_seq(self, tensor, reps, length):
+        a, _, b = tensor.size()
+        out_tensor = torch.zeros((a, length.max(), b), device=tensor.device)
+        for i in range(a):
+            out = tensor[i].repeat_interleave(reps[i], dim=0)
+            out_tensor[i, :length[i]-1, :] = out    
+        return out_tensor 
+    
+    def forward(self, cep, masks, mask_codes, reps,len_short, target_spec, spec_len, speech_embedd):
+        
+        cd_long = self.encoder(cep, masks)
+        fb = Filter_mean(reps, mask_codes, cd_long.size(1))
+        tensor = torch.bmm(fb.detach(), cd_long)
+        tensor_sync = self.pad_seq(tensor, reps, spec_len)
+
+    
+
+    
