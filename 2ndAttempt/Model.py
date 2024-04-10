@@ -4,6 +4,10 @@ import torch.nn.functional as F
 import numpy as np
 from torch.nn.parameter import Parameter
 import math
+from scipy.stats import uniform
+from scipy.spatial.distance import cosine
+import warnings
+warnings.filterwarnings("ignore")
 
 
 # Creating a convulutional model with same padding and stride o 1 and relu
@@ -62,6 +66,52 @@ class ResampleLayer(nn.Module):
         self.b = b
         self.ul = ul
         self.ur = ur
+    def compute_threshold(similarity_values, quantile_range):
+        return np.percentile(similarity_values, quantile_range)
+    def compute_cosine_similarity(vec1, vec2):
+        return 1 - cosine(vec1, vec2)
+    def downsample_segment_boundaries(similarity_values, quantile_range, b):
+        boundaries = []
+        for i in range(1, len(similarity_values)):
+            window_start = max(0, i - b)
+            window_end = min(len(similarity_values), i + b)
+            threshold = compute_threshold(similarity_values[window_start:window_end], quantile_range)
+            if similarity_values[i] < threshold:
+                boundaries.append(i)
+        return boundaries
+
+    def upsample_segment_boundaries(similarity_values, quantile_range, b):
+        boundaries = []
+        for i in range(1, len(similarity_values)):
+            window_start = max(0, i - b)
+            window_end = min(len(similarity_values), i + b)
+            threshold = compute_threshold(similarity_values[window_start:window_end], quantile_range)
+            if similarity_values[i] >= 1 - threshold:
+                boundaries.append(i)
+        return boundaries
+
+    def mean_pooling(segment):
+        if len(segment) == 0:
+            return None  # or np.nan
+        return np.mean(segment, axis=0)
+    def resampler2(frames, ul=0.1, ur=0.9, quantile_range=5, b=20):
+        boundaries = [0]
+        # Randomly draw global variable G
+        G = np.random.uniform(ul, ur)
+        for i in range(1, len(frames)):
+            # Randomly draw local variable L(t)
+            Lt = np.random.uniform(G - 0.05, G + 0.05)
+            similarity_values = [compute_cosine_similarity(frames[i], frames[j]) for j in range(i)]
+            threshold = Lt - compute_threshold(similarity_values, quantile_range)
+            if threshold < 1:
+                boundaries += downsample_segment_boundaries(similarity_values, quantile_range, b)
+            else:
+                boundaries += upsample_segment_boundaries(similarity_values, quantile_range, b)
+        boundaries.sort()
+        segments = [frames[boundaries[i]:boundaries[i+1]] for i in range(len(boundaries)-1)]
+        pooled_segments = [mean_pooling(segment) for segment in segments]
+        return pooled_segments
+
 
     def resample(self, frames):
         resampled_frames = []
@@ -89,7 +139,9 @@ class ResampleLayer(nn.Module):
 
     def forward(self, x):
         # Assuming x is a batch of frames
-        resampled_x = [self.resample(frame) for frame in x]
+        # resampled_x = [self.resample(frame) for frame in x]
+        # return resampled_x
+        resampled_x = [self.resampler2(frame) for frame in x]
         return resampled_x
 class PositionalEncoding(torch.nn.Module):
     """ From the paper: Global Rhythm Style Transfer Without Text Transcriptions
