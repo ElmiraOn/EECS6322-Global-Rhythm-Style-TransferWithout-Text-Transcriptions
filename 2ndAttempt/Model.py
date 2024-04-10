@@ -209,21 +209,6 @@ class Decoder(torch.nn.Module):
     memory = self.transformer_encoder(src_embed)
     output = self.transformer_decoder(tgt_embed, memory)
     return output
-# Define the Transformer decoder model
-# class Decoder(nn.Module):
-#     def __init__(self, d_model=256, num_heads=8, num_encoder_layers = 4, num_decoder_layers = 4, dim_feedforward=2048, dropout=0.1):
-#         super(Decoder, self).__init__()
-#         self.encoder = nn.TransformerEncoder(nn.TransformerEncoderLayer(d_model=d_model, nhead=num_heads,
-#                                                                         dim_feedforward=dim_feedforward,dropout=dropout), 
-#                                             num_layers=num_encoder_layers)
-#         self.decoder = nn.TransformerDecoder(nn.TransformerDecoderLayer(d_model=d_model, nhead=num_heads, 
-#                                                                         dim_feedforward=dim_feedforward, dropout=dropout), 
-#                                              num_layers=num_decoder_layers)
-
-#     def forward(self, src, tgt, src_mask=None, tgt_mask=None, memory_mask=None, src_key_padding_mask=None, tgt_key_padding_mask=None, memory_key_padding_mask=None):
-#         memory = self.encoder(src, mask=src_mask, src_key_padding_mask=src_key_padding_mask)
-#         output = self.decoder(tgt, memory, tgt_mask=tgt_mask, memory_mask=memory_mask, tgt_key_padding_mask=tgt_key_padding_mask, memory_key_padding_mask=memory_key_padding_mask)
-#         return output
 
 
 class Model(nn.Module):
