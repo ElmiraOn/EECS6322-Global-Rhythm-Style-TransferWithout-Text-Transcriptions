@@ -49,10 +49,10 @@ class Encoder(nn.Module):
         
         self.layers_list = nn.ModuleList(layers)
         
-    def forward(self, x, mask):       
+    def forward(self, x, mask=None):       
         for conv in self.layers_list:
             x = (conv(x))   
-        codes = x.permute(0, 2, 1) * mask.unsqueeze(-1)
+        codes = x.permute(0, 2, 1) #* mask.unsqueeze(-1)
         return codes
 
 

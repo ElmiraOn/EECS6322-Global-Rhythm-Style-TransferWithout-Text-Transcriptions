@@ -2,7 +2,7 @@ import copy
 import torch
 import numpy as np
 from scipy import signal
-from librosa.filters import mel
+#from librosa.filters import mel
 from scipy.signal import get_window
 import torch
 import torch.nn as nn
@@ -31,6 +31,17 @@ def pySTFT(x, fft_length=1024, hop_length=256):
     result = np.fft.rfft(fft_window * result, n=fft_length).T
     
     return np.abs(result)
+
+def sequence_mask(lengths, max_len=None):
+    """
+    Creates a boolean mask from sequence lengths.
+    """
+    batch_size = lengths.numel()
+    max_len = max_len or lengths.max()
+    return (torch.arange(0, max_len, device=lengths.device)
+            .type_as(lengths)
+            .repeat(batch_size, 1)
+            .lt(lengths.unsqueeze(1)))
 
 
 
