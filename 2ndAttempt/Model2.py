@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-
-
 # models based on previous studies by bahati et al
 from onmt_modules.misc import sequence_mask
 from onmt_modules.embeddings import PositionalEncoding
@@ -225,41 +223,6 @@ class Text_Encoder(nn.Module): #use attentions
         enc_states, memory_bank, src_lengths = self.encoder(src_spk, src_lengths)
         
         return enc_states, memory_bank, src_lengths
-    
-    
-    
-# class Decoder_Tx(nn.Module):
-#     """
-#     Text Decoder with stop 
-#     and num_rep prediction
-#     """
-#     def __init__(self, hparams):
-#         super().__init__()        
-        
-#         self.dim_code = hparams.dim_code
-#         self.max_decoder_steps = hparams.dec_steps_tx
-#         self.gate_threshold = hparams.gate_threshold
-#         self.dim_rep = hparams.dim_rep
-        
-#         prenet = Prenet(hparams.dim_code, hparams.dec_rnn_size)
-#         self.decoder = Bhati_Decoder.from_opt(hparams, prenet)
-
-#         self.postnet_1 = nn.Linear(hparams.dec_rnn_size, 
-#                                    hparams.dim_code+1, bias=True)
-        
-#         self.postnet_2 = nn.Linear(hparams.dec_rnn_size, 
-#                                    self.dim_rep, bias=True)
-        
-#     def forward(self, tgt, tgt_lengths, memory_bank, memory_lengths):
-        
-#         dec_outs, attns = self.decoder(tgt, memory_bank, step=None, 
-#                                        memory_lengths=memory_lengths,
-#                                        tgt_lengths=tgt_lengths)
-#         gate_text = self.postnet_1(dec_outs)
-#         rep = self.postnet_2(dec_outs)
-#         gate, text = gate_text[:, :, :1], gate_text[:, :, 1:]
-        
-#         return text, gate, rep
          
 class training_1(nn.Module):
     def __init__(self, hparams):
@@ -297,32 +260,9 @@ class training_1(nn.Module):
         return spect_out, gate_sp_out
     
     
-    # def infer_onmt(self, cep_in, mask_long,
-    #                len_spect, 
-    #                spk_emb):
-        
-    #     cd_long = self.encoder(cep_in, mask_long)
-        
-    #     spk_emb_1 = self.encoder2(spk_emb)
-        
-    #     # text to speech
-    #     _, memory_tx, _ = self.text_encoder(cd_long.transpose(1,0), len_spect,
-    #                                       spk_emb)
-    #     memory_tx_spk = torch.cat((spk_emb_1.unsqueeze(0), memory_tx), dim=0)
-    #     self.speech_decoder.decoder.init_state(memory_tx_spk, None, None)
-    #     spect_output, len_spect_out, stop_sp_output \
-    #     = self.fast_decoder_speech.infer(None, memory_tx_spk, len_spect+1, 
-    #                              self.speech_decoder.decoder, 
-    #                              self.speech_decoder.postnet)
-        
-    #     return spect_output, len_spect_out
-    
-    
     
 class Generator_2(nn.Module):
-    '''
-    async stage 2
-    '''
+
     def __init__(self, hparams):
         super().__init__() 
         
@@ -355,22 +295,3 @@ class Generator_2(nn.Module):
         
         return spect_out, gate_sp_out
     
-    
-    # def infer_onmt(self, cep_in, mask_long, len_spect,
-    #                spk_emb):
-        
-    #     cd_long = self.encoder(cep_in, mask_long)
-        
-    #     spk_emb_1 = self.encoder2(spk_emb)
-        
-    #     # text to speech
-    #     _, memory_tx, _ = self.text_encoder(cd_long.transpose(1,0), len_spect, 
-    #                                       spk_emb)
-    #     memory_tx_spk = torch.cat((spk_emb_1.unsqueeze(0), memory_tx), dim=0)
-    #     self.speech_decoder.decoder.init_state(memory_tx_spk, None, None)
-    #     spect_output, len_spect_out, stop_sp_output \
-    #     = self.fast_decoder_speech.infer(None, memory_tx_spk, len_spect+1, 
-    #                              self.speech_decoder.decoder, 
-    #                              self.speech_decoder.postnet)
-        
-    #     return spect_output, len_spect_out
