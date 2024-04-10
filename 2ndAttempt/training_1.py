@@ -3,7 +3,7 @@ from hparams import hparams, hparams_debug_string
 import torch
 import torch.optim as optim
 import torch.nn as nn
-from Model2 import training_1 as Model
+from Model1 import training_1 as Model
 from torch.utils.data import DataLoader
 from utils import sequence_mask
 import warnings
@@ -11,9 +11,9 @@ warnings.filterwarnings("ignore")
 
 
 # Define your training loop
-def train_model(model, train_loader, criterion, optimizer, device, epochs):
-        model.train()  # Set the model to training mode
-        print("model in training mode")
+def train_model(model1, train_loader, criterion, optimizer, device, epochs):
+        model1.train()  # Set the model to training mode
+        print("model in training mode 1")
         print("start training...")
         for epoch in range(epochs):
             running_loss = 0.0
@@ -44,7 +44,7 @@ def train_model(model, train_loader, criterion, optimizer, device, epochs):
 
                 optimizer.zero_grad()
                 #outputs = model(cep_real, mask_long)
-                spect_pred, stop_pred = model(cep_real.transpose(2,1),
+                spect_pred, stop_pred = model1(cep_real.transpose(2,1),
                                                 mask_long,
                                                 codes_mask,
                                                 num_rep_sync,
@@ -62,12 +62,16 @@ def train_model(model, train_loader, criterion, optimizer, device, epochs):
                 
                 # Save model checkpoints.
             if (i+1) % 10 == 0:
-                    torch.save({'model': model.state_dict(),
+                    torch.save({'model': model1.state_dict(),
                                 'optimizer': optimizer.state_dict()}, f'./Model/{i+1}-A.ckpt')
-                    print('Saved model into Model ...')  
+                    print('Saved model1 into Model ...')  
 
             print(str(epoch) + "--- Done")
         print("Finished Training...")
+        print("Start training stage 2")
+        
+
+
 
 
 if __name__ == '__main__':
