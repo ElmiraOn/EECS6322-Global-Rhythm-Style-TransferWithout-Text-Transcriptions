@@ -160,7 +160,7 @@ class Encoder(nn.Module):
     def forward(self, x, mask):       
         for conv in self.layers_list:
             x = (conv(x))   
-        codes = x.permute(0, 2, 1) 
+        codes = x.permute(0, 2, 1) * mask.unsqueeze(-1)
         return codes   
 
 # model to get attention -- Bhati et al work    
@@ -257,38 +257,4 @@ class training_1(nn.Module):
         return spect_out, gate_sp_out
     
     
-    
-class Generator_2(nn.Module):
-
-    def __init__(self, hparams):
-        super().__init__() 
-        
-        self.encoder = Encoder(hparams)
-        self.text_encoder = Text_Encoder(hparams)
-        self.speech_decoder = speech_decoder(hparams)   
-        self.encoder2 = nn.Linear(hparams.dim_spk, 
-                                     hparams.enc_rnn_size, bias=True)
-        self.fast_decoder_speech = Fast_decoder(hparams, 'Speech')
-        
-        
-    def forward(self, cep, masks, mask_codes, reps, len_short,
-                      target_spec, spec_len, 
-                      speech_embedd):
-        
-        cd_long = self.encoder(cep, masks)
-        fb = Filter_mean(reps, mask_codes, cd_long.size(1))
-        
-        tensor = torch.bmm(fb.detach(), cd_long.detach())
-        
-        speech_embedd_1 = self.encoder2(speech_embedd)
-        
-        # text to speech
-        _, memory_tx, _ = self.text_encoder(tensor.transpose(1,0), len_short, 
-                                          speech_embedd)
-        memory_tx_spk = torch.cat((speech_embedd_1.unsqueeze(0), memory_tx), dim=0)
-        self.speech_decoder.decoder.init_state(memory_tx_spk, None, None)
-        spect_out, gate_sp_out \
-        = self.speech_decoder(target_spec, spec_len, memory_tx_spk, len_short+1)
-        
-        return spect_out, gate_sp_out
     
