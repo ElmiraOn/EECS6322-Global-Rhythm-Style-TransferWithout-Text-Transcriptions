@@ -221,29 +221,37 @@ class Text_Encoder(nn.Module): #use attentions
         enc_states, memory_bank, src_lengths = self.encoder(src_spk, src_lengths)
         
         return enc_states, memory_bank, src_lengths
-    
-    
-class training_2(nn.Module):
-
+         
+class training_1(nn.Module):
     def __init__(self, hparams):
         super().__init__() 
         
         self.encoder = Encoder(hparams)
         self.text_encoder = Text_Encoder(hparams)
-        self.speech_decoder = speech_decoder(hparams)   
+        self.speech_decoder = speech_decoder(hparams) # used Bhati et al.   
         self.encoder2 = nn.Linear(hparams.dim_spk, hparams.enc_rnn_size, bias=True)
         self.fast_decoder_speech = Fast_decoder(hparams, 'Speech')
         
-    def forward(self, cep, masks, mask_codes, reps, length,target_spec, spec_len, speech_embedd):
-        
-        cd = self.encoder(cep, masks)
-        fb = Filter_mean(reps, mask_codes, cd.size(1))
-        tensor = torch.bmm(fb.detach(), cd.detach())
-        speech_embedd_1 = self.encoder2(speech_embedd)
-        _, memory_text, _ = self.text_encoder(tensor.transpose(1,0), length, speech_embedd)
-        memory_text_sp = torch.cat((speech_embedd_1.unsqueeze(0), memory_text), dim=0)
-        self.speech_decoder.decoder.init_state(memory_text_sp, None, None)
-        out, gate_sp_out = self.speech_decoder(target_spec, spec_len, memory_text_sp, length+1)
-        
-        return out, gate_sp_out
+    def pad_seq(self, tensor, reps, length):
+        a, _, b = tensor.size()
+        out_tensor = torch.zeros((a, length.max(), b), device=tensor.device)
+        for i in range(a):
+            out = tensor[i].repeat_interleave(reps[i], dim=0)
+            out_tensor[i, :length[i]-1, :] = out    
+        return out_tensor 
     
+    def forward(self, cep, masks, mask_codes, reps,len_short, target_spec, spec_len, speech_embedd):
+        
+        cd_long = self.encoder(cep, masks)
+        fb = Filter_mean(reps, mask_codes, cd_long.size(1))
+        tensor = torch.bmm(fb.detach(), cd_long)
+        tensor_sync = self.pad_seq(tensor, reps, spec_len)
+        speech_embedd_1 = self.encoder2(speech_embedd)
+        # text to speech
+        _, memory_tx, _ = self.text_encoder(tensor_sync.transpose(1,0), spec_len, speech_embedd)
+        memory_tx_spk = torch.cat((speech_embedd_1.unsqueeze(0), memory_tx), dim=0)
+        self.speech_decoder.decoder.init_state(memory_tx_spk, None, None)
+        spect_out, gate_sp_out \
+        = self.speech_decoder(target_spec, spec_len, memory_tx_spk, spec_len+1)
+        
+        return spect_out, gate_sp_out
