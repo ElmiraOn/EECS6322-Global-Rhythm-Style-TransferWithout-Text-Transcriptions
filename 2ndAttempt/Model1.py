@@ -8,10 +8,12 @@ from onmt_modules.embeddings import PositionalEncoding
 from onmt_modules.encoder_transformer import TransformerEncoder as OnmtEncoder
 from onmt_modules.decoder_transformer import TransformerDecoder
 
-def Filter_mean(reps, mask_codes, max_length):
+# Filter and aggregate -- resample
+def resampler(reps, mask_codes, max_length):
     reps = reps.unsqueeze(-1)
     mask_codes = mask_codes.unsqueeze(-1) 
     reps = reps * mask_codes
+    # find boundary for resampling
     right_edge = reps.cumsum(dim=1)
     left_edge = torch.zeros_like(right_edge)
     left_edge[:, 1:, :] = right_edge[:, :-1, :]
@@ -21,6 +23,7 @@ def Filter_mean(reps, mask_codes, max_length):
     lower = index - left_edge
     right_edge_flip = max_length - right_edge
     upper = (index - right_edge_flip).flip(dims=(2,))
+    # filtering+mean pooing
     fb = F.relu(torch.min(lower, upper)).float()
     fb = (fb > 0).float() #mean pooling
     norm = fb.sum(dim=-1, keepdim=True)
@@ -28,6 +31,7 @@ def Filter_mean(reps, mask_codes, max_length):
     fb = fb / norm
     return fb * mask_codes    
 
+# Decoder for resampler based on Bhati et al work
 class Bhati_Decoder(TransformerDecoder):
     def forward(self, tgt, memory_bank, step=None, **kwargs):
         if step == 0:
@@ -36,7 +40,7 @@ class Bhati_Decoder(TransformerDecoder):
             tgt_lens = kwargs["tgt_lengths"]
         else:    
             tgt_words = kwargs["tgt_words"]
-        emb = self.embeddings(tgt, step=step)
+        emb = self.embeddings(tgt, step=step) # embedding
         assert emb.dim() == 3 
         output = emb.transpose(0, 1).contiguous()
         src_memory_bank = memory_bank.transpose(0, 1).contiguous()
@@ -49,6 +53,7 @@ class Bhati_Decoder(TransformerDecoder):
             tgt_pad_mask = ~sequence_mask(tgt_lens, tgt_max_len).unsqueeze(1)
         else:    
             tgt_pad_mask = tgt_words.data.eq(pad_idx).unsqueeze(1)
+        #Attention
         with_align = kwargs.pop('with_align', False)
         attn_aligns = []
         for i, layer in enumerate(self.transformer_layers):
@@ -64,6 +69,7 @@ class Bhati_Decoder(TransformerDecoder):
                 with_align=with_align)
             if attn_align is not None:
                 attn_aligns.append(attn_align)
+        # normalize
         output = self.layer_norm(output)
         dec_outs = output.transpose(0, 1).contiguous()
         attn = attn.transpose(0, 1).contiguous()
@@ -93,35 +99,36 @@ class Fast_decoder(object):
         spect, gate = spect_gate[:, :, 1:], spect_gate[:, :, :1]
         return spect, gate
 
-    def infer(self, tgt_real, memory_bank, memory_lengths, decoder, postnet):
-        bank = memory_bank.size(1)
-        device = memory_bank.device
-        spect_outputs = torch.zeros((self.max_decoder_steps, bank, self.dim_freq), dtype=torch.float, device=device)
-        gate_outputs = torch.zeros((self.max_decoder_steps, B, 1), dtype=torch.float, device=device)
-        tgt_words = torch.zeros([B, 1], dtype=torch.float, device=device)
-        current_pred = torch.zeros([1, B, self.dim_freq], dtype=torch.float, device=device)
+    # def infer(self, tgt_real, memory_bank, memory_lengths, decoder, postnet):
+    #     bank = memory_bank.size(1)
+    #     device = memory_bank.device
+    #     spect_outputs = torch.zeros((self.max_decoder_steps, bank, self.dim_freq), dtype=torch.float, device=device)
+    #     gate_outputs = torch.zeros((self.max_decoder_steps, B, 1), dtype=torch.float, device=device)
+    #     tgt_words = torch.zeros([B, 1], dtype=torch.float, device=device)
+    #     current_pred = torch.zeros([1, B, self.dim_freq], dtype=torch.float, device=device)
         
-        for t in range(self.max_decoder_steps):
-            dec_outs, _ = decoder(current_pred, memory_bank, t, memory_lengths=memory_lengths,tgt_words=tgt_words)
-            spect_gate = postnet(dec_outs)
-            spect, gate = spect_gate[:, :, 1:], spect_gate[:, :, :1]
-            spect_outputs[t:t+1] = spect
-            gate_outputs[t:t+1] = gate
-            stop = (torch.sigmoid(gate) - self.gate_threshold + 0.5).round()
-            current_pred = spect.data
-            tgt_words = stop.squeeze(-1).t()
-            if (stop == 1).all():
-                break
-        stop_quant = (torch.sigmoid(gate_outputs.data) - self.gate_threshold + 0.5).round().squeeze(-1) 
-        spec_len = (stop_quant.cumsum(dim=0)==0).sum(dim=0)
+    #     for t in range(self.max_decoder_steps):
+    #         dec_outs, _ = decoder(current_pred, memory_bank, t, memory_lengths=memory_lengths,tgt_words=tgt_words)
+    #         spect_gate = postnet(dec_outs)
+    #         spect, gate = spect_gate[:, :, 1:], spect_gate[:, :, :1]
+    #         spect_outputs[t:t+1] = spect
+    #         gate_outputs[t:t+1] = gate
+    #         stop = (torch.sigmoid(gate) - self.gate_threshold + 0.5).round()
+    #         current_pred = spect.data
+    #         tgt_words = stop.squeeze(-1).t()
+    #         if (stop == 1).all():
+    #             break
+    #     stop_quant = (torch.sigmoid(gate_outputs.data) - self.gate_threshold + 0.5).round().squeeze(-1) 
+    #     spec_len = (stop_quant.cumsum(dim=0)==0).sum(dim=0)
         
-        return spect_outputs, spec_len, gate_outputs
+    #     return spect_outputs, spec_len, gate_outputs
 
+# convolutional layers
 class Conv(torch.nn.Module):
     def __init__(self, in_channels, out_channels, num_groups, kernel_size=1, stride=1,
                  bias=True, ):
         super(Conv, self).__init__()
-        padding = (kernel_size - 1) // 2
+        padding = (kernel_size - 1) // 2 #SAME padding
         self.conv = torch.nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
         self.activation = nn.ReLU()
         self.initialize_weights()
@@ -243,7 +250,7 @@ class training_1(nn.Module):
     def forward(self, cep, masks, mask_codes, reps,len_short, target_spec, spec_len, speech_embedd):
         
         cd_long = self.encoder(cep, masks)
-        fb = Filter_mean(reps, mask_codes, cd_long.size(1))
+        fb = resampler(reps, mask_codes, cd_long.size(1))
         tensor = torch.bmm(fb.detach(), cd_long)
         tensor_sync = self.pad_seq(tensor, reps, spec_len)
         speech_embedd_1 = self.encoder2(speech_embedd)
